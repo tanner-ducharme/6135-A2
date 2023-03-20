@@ -161,3 +161,6 @@ test_gru.py
 *.profile_default
 /question3
 /env
+*.png
+*.jpg
+
