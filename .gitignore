@@ -157,6 +157,7 @@ original_test_gru.py
 original_test_transformer.py
 test.py
 test_gru.py
+test_transformer.py
 
 *.profile_default
 /question3
