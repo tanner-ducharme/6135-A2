@@ -137,9 +137,36 @@ class Attn(nn.Module):
         # ==========================
         # TODO: Write your code here
         # ==========================
+
+
+        # WHERE DOES MASKING COME IN?
+
         # iterate over batches
 
-        pass
+        batch_size, seq_length, hidden_size = inputs.shape
+
+        # reshaping to get 'sequence_length' many copies of the hidden states vector
+  
+        hidden_reshaped = hidden_states[0].reshape(batch_size, 1, hidden_size).repeat(1, seq_length, 1)
+
+
+        input_attn = torch.cat([inputs, hidden_reshaped], dim = 2)
+
+
+
+        # hidden size is 64, W input is hidden_size *2 x hidden_size
+        # why is input allowed to be 256 x 128???
+
+        # multiply attention input times W matrix, get tanh
+        Q = self.tanh(self.W(input_attn))
+        K = self.V(Q)
+        attn_sum = torch.sum(K, dim=2, keepdim=True)
+
+        attn_vector = self.softmax(attn_sum)
+
+        output = attn_vector * inputs
+
+        return output, attn_vector
 
 
 
@@ -212,6 +239,8 @@ class Encoder(nn.Module):
         h_backward = hidden_states[1]
         final_hidden_states = (h_forward + h_backward).unsqueeze(0)
         return output, final_hidden_states
+    
+
 
     def initial_states(self, batch_size, device=None):
         if device is None:
@@ -238,7 +267,11 @@ class DecoderAttn(nn.Module):
         self.num_layers = num_layers
         self.dropout = nn.Dropout(p=dropout)
 
-        self.rnn = None
+        self.rnn = nn.GRU(input_size=self.embedding_size, 
+                          hidden_size=self.hidden_size, 
+                          num_layers=self.num_layers,
+                        #   bidirectional=True, 
+                          batch_first=True)
         
         self.mlp_attn = Attn(hidden_size, dropout)
 
@@ -268,7 +301,10 @@ class DecoderAttn(nn.Module):
         # ==========================
         # TODO: Write your code here
         # ==========================
-        pass
+        inputs = self.dropout(inputs)
+        attn_output, _ = self.mlp_attn(inputs, hidden_states, mask)
+        decoder_output, hidden_states = self.rnn(attn_output, hidden_states)
+        return decoder_output, hidden_states
         
         
 class EncoderDecoder(nn.Module):

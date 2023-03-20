@@ -38,7 +38,22 @@ class LayerNorm(nn.Module):
         # ==========================
         # TODO: Write your code here
         # ==========================
-        pass
+        # layers = inputs[-1]
+        # _ = layers
+        layer_mean = torch.mean(inputs, dim=-1)
+        _ = layer_mean
+        layer_mean = layer_mean.reshape(*layer_mean.shape, 1)
+
+        layer_var = torch.var(inputs, dim=-1, unbiased=False)
+        _ = layer_var
+        layer_var = layer_var.reshape(*layer_var.shape, 1)
+
+        numerator = inputs - layer_mean
+        denominator = torch.sqrt(layer_var + self.eps)
+        quotient = numerator/denominator
+        layer_norm = quotient * self.weight + self.bias
+
+        return layer_norm
 
     def reset_parameters(self):
         nn.init.ones_(self.weight)
@@ -91,7 +106,12 @@ class MultiHeadedAttention(nn.Module):
         # ==========================
         # TODO: Write your code here
         # ==========================
-        pass
+        dot_products = torch.matmul(queries, keys.transpose(2, 3))
+        dot_products /= math.sqrt(self.head_size)
+
+        #dot_products.masked_fill_(causal_mask, -1e4)
+        attention_weights = F.softmax(dot_products, dim=3)
+        return attention_weights
         
     def apply_attention(self, queries, keys, values, mask=None):
         """Apply the attention.
@@ -135,10 +155,9 @@ class MultiHeadedAttention(nn.Module):
             the sequences in the batch, and all positions in each sequence. 
         """
 
-        # ==========================
-        # TODO: Write your code here
-        # ==========================
-        pass
+        attention_weights = self.get_attention_weights(queries, keys)
+        outputs = torch.matmul(attention_weights, values)
+        return self.merge_heads(outputs)
 
     def split_heads(self, tensor):
         """Split the head vectors.
@@ -164,10 +183,8 @@ class MultiHeadedAttention(nn.Module):
             definition of the input `tensor` above.
         """
 
-        # ==========================
-        # TODO: Write your code here
-        # ==========================
-        pass
+        tensor = tensor.view((*tensor.shape[:2], self.num_heads, -1))
+        return tensor.transpose(1, 2)
         
     def merge_heads(self, tensor):
         """Merge the head vectors.
@@ -192,10 +209,8 @@ class MultiHeadedAttention(nn.Module):
             definition of the input `tensor` above.
         """
 
-        # ==========================
-        # TODO: Write your code here
-        # ==========================
-        pass
+        tensor = tensor.transpose(1, 2)
+        return tensor.reshape((tensor.size(0), self.sequence_length, -1))
 
     def forward(self, hidden_states, mask=None):
         """Multi-headed attention.
@@ -232,11 +247,15 @@ class MultiHeadedAttention(nn.Module):
             Tensor containing the output of multi-headed attention for all the
             sequences in the batch, and all positions in each sequence.
         """
-        # ==========================
-        # TODO: Write your code here
-        # ==========================
-        pass
+        '''
+        Q = X * W_{Q} + b_{Q}        # Queries
+        K = X * W_{K} + b_{K}        # Keys
+        V = X * W_{V} + b_{V}        # Values
 
+        Y = attention(Q, K, V)       # Attended values (concatenated for all heads)
+        outputs = Y * W_{Y} + b_{Y}  # Linear projection
+        '''
+        # Q = ?
 class PostNormAttentionBlock(nn.Module):
     
     def __init__(self, embed_dim, hidden_dim, num_heads, sequence_length, dropout=0.30):
