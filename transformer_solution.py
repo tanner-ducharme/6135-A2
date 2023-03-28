@@ -69,15 +69,15 @@ class MultiHeadedAttention(nn.Module):
 
         hidden_size = self.num_heads * self.head_size
 
-        self.W_q = nn.Parameter(torch.empty(hidden_size, hidden_size))
-        self.W_k = nn.Parameter(torch.empty(hidden_size, hidden_size))
-        self.W_v = nn.Parameter(torch.empty(hidden_size, hidden_size))
-        self.W_o = nn.Parameter(torch.empty(hidden_size, hidden_size))
+        self.W_q = nn.Parameter(torch.ones(hidden_size, hidden_size))
+        self.W_k = nn.Parameter(torch.ones(hidden_size, hidden_size))
+        self.W_v = nn.Parameter(torch.ones(hidden_size, hidden_size))
+        self.W_o = nn.Parameter(torch.ones(hidden_size, hidden_size))
 
-        self.B_q = nn.Parameter(torch.empty(hidden_size))
-        self.B_k = nn.Parameter(torch.empty(hidden_size))
-        self.B_v = nn.Parameter(torch.empty(hidden_size))
-        self.B_o = nn.Parameter(torch.empty(hidden_size))
+        self.B_q = nn.Parameter(torch.zeros(hidden_size))
+        self.B_k = nn.Parameter(torch.zeros(hidden_size))
+        self.B_v = nn.Parameter(torch.zeros(hidden_size))
+        self.B_o = nn.Parameter(torch.zeros(hidden_size))
 
 
         # ==========================
@@ -117,16 +117,41 @@ class MultiHeadedAttention(nn.Module):
             the sequences in the batch.
         """
 
-        # multiply queries and keys (transposed)
+        
+
+        batch_size, num_heads, sequence_length, head_size = keys.shape
+        # mask = torch.randint(0, 2, (batch_size, sequence_length))
+
+        # if mask is not None:
+        #     print('\n\n\nMASK\n\n\n')
+        #     print(mask.shape)
+
+        #     print('batch_size: ', batch_size)
+        #     print('num_heads: ', num_heads)
+        #     print('sequence_length: ', sequence_length)
+        #     print('head_size: ', head_size)
+
+        #     print(mask)
+
         keys = keys.transpose(2, 3)
-        qk_prod = torch.matmul(queries, keys)
 
-        # calc interaction score
-        interaction_score = qk_prod / np.sqrt(self.head_size)
 
-        # get softmax of interaction score to calc attention_score
-        attn_score = F.softmax(interaction_score, dim=-1)
+        # calculate interaction score
+        interaction_score = torch.matmul(queries, keys) / np.sqrt(self.head_size)
+
+        # apply mask
+        if mask is not None:
+
+            mask = mask.view(batch_size, 1, 1, sequence_length).to(bool)
+            masked_score = interaction_score.masked_fill(mask==0, float("-inf"))
+            
+        else:
+            masked_score = interaction_score
+
+        attn_score = F.softmax(masked_score, dim=3)
+
         return attn_score
+        
         
     def apply_attention(self, queries, keys, values, mask=None):
         """Apply the attention.
@@ -171,7 +196,7 @@ class MultiHeadedAttention(nn.Module):
         """
 
 
-        attn_score = self.get_attention_weights(queries, keys)
+        attn_score = self.get_attention_weights(queries, keys, mask)
 
         prod = torch.matmul(attn_score, values)
         final_score = self.merge_heads(prod)
@@ -288,7 +313,7 @@ class MultiHeadedAttention(nn.Module):
         K = self.split_heads(K)
         V = self.split_heads(V)
 
-        attn = self.apply_attention(Q, K, V)
+        attn = self.apply_attention(Q, K, V, mask)
 
         output = attn @ self.W_o + self.B_o
 
@@ -364,16 +389,30 @@ class PreNormAttentionBlock(nn.Module):
         # TODO: Write your code here
         # ==========================
 
-        # layer norm 1
-        x_norm1 = self.layer_norm_1(x)
-        # multihead attn
-        x_attn = self.attn(x_norm1, mask)
-        # layer norm 2
-        x_norm2 = self.layer_norm_2(x_attn + x)
-        # FFN
-        x_ffn = self.linear(x_norm2)
 
-        outputs = x_ffn + x_attn
+        # STEP 1
+        # pass x inputs to layer norm
+        x_norm1 = self.layer_norm_1(x)
+
+        # STEP 2
+        # pass output of first layer norm to attention
+        x_attn = self.attn(x_norm1, mask)
+
+        # STEP 3
+        # combine original input x with output of attention
+        result = x + x_attn
+
+        # STEP 4
+        # pass result to second layer norm
+        x_norm2 = self.layer_norm_2(result)
+
+        # STEP 5
+        # pass output of second layer norm to feed forward network
+        x_ffn = self.linear(x_norm2)
+        
+        # STEP 6
+        # combine output of feed forward network with result from step 3
+        outputs = x_ffn + result
         return outputs
 
 
@@ -429,34 +468,34 @@ class Transformer(nn.Module):
         output (`torch.FloatTensor` of shape `(batch_size, embed_dim)`)
             A tensor containing the output from the mlp_head.
         """
+        # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # Preprocess input
+        batch_size, sequence_length = x.shape
+        # mask = torch.randint(0, 2, (batch_size, sequence_length), dtype=torch.bool)
       
-        
         x = self.embedding(x)
         B, T, _ = x.shape
-
 
         # Add CLS token and positional encoding
         cls_token = self.cls_token.repeat(B, 1, 1)
         x = torch.cat([cls_token, x], dim=1)
         x = x + self.pos_embedding[:,:T+1]
 
+        # account for cls token in mask
+        # Concatenate the ones_tensor to the beginning of the 2nd dimension (dim=1)
+        mask = torch.cat((torch.ones(batch_size, 1).to('cuda'), mask), dim=1).to('cuda')
 
         #Add dropout and then the transformer
         x = self.dropout(x)
         for attn_block in self.transformer:
-            x = attn_block(x)
+            x = attn_block(x, mask)
         
-
-
-        #Take the cls token representation and send it to mlp_head
- 
         x = x.transpose(0, 1)
         cls_embedding = x[0]
         output = self.mlp_head(cls_embedding)
 
 
-
-        # Perform classification prediction
-        
         return output
+
+
+

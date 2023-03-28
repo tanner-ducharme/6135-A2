@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+
 class GRU(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(GRU, self).__init__()
@@ -134,13 +135,7 @@ class Attn(nn.Module):
 
   
         """
-        # ==========================
-        # TODO: Write your code here
-        # ==========================
-
-
-        # WHERE DOES MASKING COME IN?
-
+       
         # iterate over batches
 
         batch_size, seq_length, hidden_size = inputs.shape
@@ -162,10 +157,19 @@ class Attn(nn.Module):
         K = self.V(Q)
         attn_sum = torch.sum(K, dim=2, keepdim=True)
 
+        if mask is not None:
+            
+            mask = mask.unsqueeze(2)
+            attn_sum = attn_sum.masked_fill(mask == 0, -1e9)
+
         attn_vector = self.softmax(attn_sum)
 
         output = attn_vector * inputs
 
+
+
+
+     
         return output, attn_vector
 
 
@@ -353,3 +357,5 @@ class EncoderDecoder(nn.Module):
         x, hidden_states = self.decoder(x, hidden_states, mask)
         x = x[:, 0]
         return x, hidden_states
+
+
