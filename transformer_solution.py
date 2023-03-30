@@ -468,7 +468,6 @@ class Transformer(nn.Module):
         output (`torch.FloatTensor` of shape `(batch_size, embed_dim)`)
             A tensor containing the output from the mlp_head.
         """
-        # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # Preprocess input
         batch_size, sequence_length = x.shape
         # mask = torch.randint(0, 2, (batch_size, sequence_length), dtype=torch.bool)
@@ -483,7 +482,9 @@ class Transformer(nn.Module):
 
         # account for cls token in mask
         # Concatenate the ones_tensor to the beginning of the 2nd dimension (dim=1)
-        mask = torch.cat((torch.ones(batch_size, 1).to('cuda'), mask), dim=1).to('cuda')
+        
+        if mask is not None:
+            mask = torch.cat((torch.ones(batch_size, 1), mask), dim=1)
 
         #Add dropout and then the transformer
         x = self.dropout(x)

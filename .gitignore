@@ -165,3 +165,5 @@ test_transformer.py
 *.png
 *.jpg
 
+
+test_transformer_2.py
